@@ -35,9 +35,26 @@ module Exercises = struct
     |> place_piece ~piece:Piece.O ~position:{ Position.row = 2; column = 0 }
   ;;
 
-  let print_game (game : Game.t) =
-    ignore game;
-    print_endline ""
+  let get_str_piece ~tup ~game = 
+    let row, col = tup in
+    let open Game in
+    let pos = { Position.row = row; Position.column = col} in
+    match Map.find game.board pos with
+    | Some piece -> Game.Piece.to_string piece
+    | _ -> " "
+  ;;
+
+  let print_game (game : Game.t) = 
+    let idx = Game.Game_kind.board_length game.game_kind 
+      |> List.init ~f:(fun i -> i) in
+    let sep, line = " | ", "\n---------\n" in
+    List.fold idx ~init:[] ~f:(fun acc i -> 
+      acc @ [List.fold idx ~init:[] 
+      ~f:(fun acc j -> 
+        acc @ [get_str_piece ~tup:(i, j) ~game]) 
+      |> String.concat ~sep])
+      |> String.concat ~sep:line
+      |> print_endline
   ;;
 
   let%expect_test "print_win_for_x" =
@@ -66,16 +83,69 @@ module Exercises = struct
     return ()
   ;;
 
+  let get_pos ~tup ~game = 
+    let row, col = tup in
+    let open Game in
+    let pos = { Position.row = row; Position.column = col} in
+    match Map.find game.board pos with
+    | Some _ -> None
+    | _ -> Some pos
+  ;;
+
   (* Exercise 1 *)
   let available_moves (game : Game.t) : Game.Position.t list =
-    ignore game;
-    failwith "Implement me!"
+    let idx = Game.Game_kind.board_length game.game_kind 
+      |> List.init ~f:(fun i -> i) in
+    List.fold idx ~init:[] ~f:(fun acc i -> 
+      acc @ List.fold idx ~init:[] ~f:(fun acc j -> 
+        match get_pos ~tup:(i, j) ~game with
+        | Some pos -> pos :: acc
+        | _ -> acc))
+  ;;
+
+  let%expect_test "available_moves_win_for_x" =
+    let moves = available_moves win_for_x in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|()|}];
+    return ()
+  ;;
+
+  let%expect_test "available_moves_non_win" =
+    let moves = available_moves non_win in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|
+      (((row 0) (column 2)) ((row 0) (column 1)) ((row 1) (column 2)) 
+       ((row 1) (column 1)) ((row 2) (column 1)))
+      |}];
+    return ()
+  ;;
+
+  let check_winner game = 
+
+  ;;
+
+  let all_pieces_in_bound game = 
+    let open Game in
+    let board_size = Game.Game_kind.board_length game.game_kind in
+    Map.fold game.board ~init:[] ~f:(fun ~key ~data:_ acc -> 
+      let i, j = key.row, key.column in
+      match (0 <= i && i < board_size) && (0 <= j && j < board_size) with 
+      | false -> true :: acc
+      | true -> acc) |> List.is_empty |> not
   ;;
 
   (* Exercise 2 *)
-  let evaluate (game : Game.t) : Game.Evaluation.t =
-    ignore game;
-    failwith "Implement me!"
+  let evaluate (game : Game.t) : Game.Evaluation.t = 
+    match available_moves game with
+    | [] -> match check_winner game with
+      | (true, player) -> Game.Evaluation.Game_over player
+      | _ -> Game.Evaluation.Game_over None
+    | _ -> 
+      match all_pieces_in_bound game with
+      | false -> Game.Evaluation.Illegal_move
+      | true -> Game.Evaluation.Game_continues
   ;;
 
   (* Exercise 3 *)
@@ -160,20 +230,43 @@ module Exercises = struct
   ;;
 end
 
+let handle (_client : unit) query = 
+  print_s [%message "Received query" (query : Rpcs.Take_turn.Query.t)];
+  let response = {Rpcs.Take_turn.Response.piece = Game.Piece.X; Rpcs.Take_turn.Response.position = {Game.Position.row = 0; column = 0}}in
+  return response
+
+let implementations =
+  Rpc.Implementations.create_exn
+    ~on_unknown_rpc:`Close_connection
+    ~implementations:[ Rpc.Rpc.implement Rpcs.Take_turn.rpc handle]
+;;
+
 let command_play =
   Command.async
     ~summary:"Play"
     (let%map_open.Command () = return ()
-     and controller =
-       flag "-controller" (required host_and_port) ~doc:"_ host_and_port of controller"
+     (* and controller =
+       flag "-controller" (required host_and_port) ~doc:"_ host_and_port of controller" *)
      and port = flag "-port" (required int) ~doc:"_ port to listen on" in
      fun () ->
+      let%bind server =
+           Rpc.Connection.serve
+             ~implementations
+             ~initial_connection_state:(fun _client_identity _client_addr ->
+               (* This constructs the "client" values which are passed to the
+                  implementation function above. We're just using unit for now. *)
+               ())
+             ~where_to_listen:(Tcp.Where_to_listen.of_port port)
+             ()
+         in
+         Tcp.Server.close_finished server)
        (* We should start listing on the supplied [port], ready to handle incoming
           queries for [Take_turn] and [Game_over]. We should also connect to the
           controller and send a [Start_game] to initiate the game. *)
-       ignore controller;
-       ignore port;
-       return ())
+            
+       (* ignore controller; *)
+       (* ignore port; *)
+       (* return ()) *)
 ;;
 
 let command =
