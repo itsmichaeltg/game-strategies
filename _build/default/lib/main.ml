@@ -40,9 +40,7 @@ module Exercises = struct
     let open Game in
     let pos = { Position.row = row; Position.column = col} in
     match Map.find game.board pos with
-    | Some piece -> (match piece with 
-      | Piece.X -> "X"
-      | Piece.O -> "O")
+    | Some piece -> Game.Piece.to_string piece
     | _ -> " "
   ;;
 
@@ -124,24 +122,160 @@ module Exercises = struct
     return ()
   ;;
 
+  let check (lst: Game.Piece.t option list list) ~win_length = 
+    List.fold lst ~init:(false, None) ~f:(fun (bool_val, player) sub_lst -> 
+      let sub_lst = List.filter_opt sub_lst in
+      match List.length sub_lst = win_length with
+      | false -> (bool_val, player)
+      | true -> 
+        let head = sub_lst |> List.hd_exn in
+        let unique_lst = List.filter sub_lst
+          ~f:(fun i -> Game.Piece.equal head i |> not) in
+        match unique_lst |> List.is_empty with
+        | true -> (true, Some head)
+        | false -> (bool_val, player))
+  ;;
+  let check_winner game = 
+    let open Game in
+    let idx = Game.Game_kind.board_length game.game_kind in
+    let win_length = Game.Game_kind.win_length game.game_kind in
+    let rows = List.init idx ~f:(fun i -> 
+      List.init win_length ~f:(fun j -> 
+        Map.find game.board {Game.Position.row = i; column = j})) in
+    match check rows ~win_length with
+    | true, player -> true, player
+    | _ -> 
+      let cols = List.init idx ~f:(fun i -> 
+        List.init win_length ~f:(fun j -> 
+          Map.find game.board {Game.Position.row = j; column = i})) in
+      match check cols ~win_length with
+      | true, player -> true, player
+      | _ -> 
+        let left_diag = [List.init idx ~f:(fun i -> 
+          Map.find game.board {Game.Position.row = i; column = i})] in
+          match check left_diag ~win_length with 
+          | true, player -> true, player
+          | _ -> 
+            let right_diag = [List.init idx ~f:(fun i -> 
+              Map.find game.board {Game.Position.row = i; column = win_length - (i + 1)})] in
+              match check right_diag ~win_length with 
+              | true, player -> true, player
+              | _ -> false, None
+  ;;
+
+  let all_pieces_in_bound game = 
+    let open Game in
+    Map.fold game.board ~init:[] ~f:(fun ~key ~data:_ acc -> 
+      match Game.Position.in_bounds key ~game_kind:game.game_kind with 
+      | false -> key :: acc
+      | true -> acc) |> List.is_empty
+  ;;
+
   (* Exercise 2 *)
-  let evaluate (game : Game.t) : Game.Evaluation.t =
-    ignore game;
-    failwith "Implement me!"
+  let evaluate (game : Game.t) : Game.Evaluation.t = 
+    match check_winner game with
+    | true, player -> Game.Evaluation.Game_over {winner = player}
+    | _ -> match available_moves game with
+          | [] -> Game.Evaluation.Game_over {winner = None} 
+          | _ -> 
+            match all_pieces_in_bound game with
+            | false -> Game.Evaluation.Illegal_move
+            | true -> Game.Evaluation.Game_continues
+  ;;
+
+  let%expect_test "evaluate_win_for_x" =
+    let evaluation = evaluate win_for_x in
+    print_s [%sexp (evaluation : Game.Evaluation.t)];
+    [%expect
+      {|(Game_over (winner (X)))|}];
+    return ()
+  ;;
+
+  let%expect_test "evaluate_moves_non_win" =
+    let evaluation = evaluate non_win in
+    print_s [%sexp (evaluation : Game.Evaluation.t)];
+    [%expect
+      {|
+      Game_continues
+      |}];
+    return ()
   ;;
 
   (* Exercise 3 *)
   let winning_moves ~(me : Game.Piece.t) (game : Game.t) : Game.Position.t list =
-    ignore me;
-    ignore game;
-    failwith "Implement me!"
+    let moves = available_moves game in
+    List.map moves ~f:(fun i -> 
+      let tmp_game = {Game.game_kind = game.game_kind; 
+        board = Map.add_exn game.board ~key:i ~data:me} in
+      match evaluate tmp_game with 
+      | Game.Evaluation.Game_over _ 
+          -> Some i
+      | _ -> None
+    ) |> List.filter_opt
+  ;;
+
+  let%expect_test "winning_moves_win_for_x" =
+    let moves = winning_moves ~me:Game.Piece.O win_for_x in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|()|}];
+    return ()
+  ;;
+
+  let%expect_test "winning_moves_non_win" =
+    let moves = winning_moves ~me:Game.Piece.X non_win in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|(((row 1) (column 1)))|}];
+    return ()
   ;;
 
   (* Exercise 4 *)
   let losing_moves ~(me : Game.Piece.t) (game : Game.t) : Game.Position.t list =
-    ignore me;
-    ignore game;
-    failwith "Implement me!"
+    winning_moves ~me:(Game.Piece.flip me) game;
+  ;;
+
+  let%expect_test "losing_moves_win_for_x" =
+    let moves = losing_moves ~me:Game.Piece.X win_for_x in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|()|}];
+    return ()
+  ;;
+
+  let%expect_test "losing_moves_non_win" =
+    let moves = losing_moves ~me:Game.Piece.O non_win in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|(((row 1) (column 1)))|}];
+    return ()
+  ;;
+
+  let available_moves_that_do_not_immediately_lose ~(me : Game.Piece.t) (game : Game.t) : Game.Position.t list =
+    let moves = available_moves game in
+    List.map moves ~f:(fun i -> 
+      let tmp_game = {Game.game_kind = game.game_kind; 
+        board = Map.add_exn game.board ~key:i ~data:me} in
+      match losing_moves tmp_game ~me with 
+      | [] -> Some i
+      | _ -> None
+    ) |> List.filter_opt
+  ;;
+
+  let%expect_test "available_moves_that_do_not_immediately_lose_win_for_x" =
+    let moves = available_moves_that_do_not_immediately_lose ~me:Game.Piece.X win_for_x in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|()|}];
+    return ()
+  ;;
+
+  let%expect_test "available_moves_that_do_not_immediately_lose_non_win" =
+    let moves = available_moves_that_do_not_immediately_lose ~me:Game.Piece.O non_win in
+    print_s [%sexp (moves : Game.Position.t list)];
+    [%expect
+      {|(((row 1) (column 1)))|}];
+    return ()
   ;;
 
   let exercise_one =
@@ -163,7 +297,7 @@ module Exercises = struct
        fun () ->
          let evaluation = evaluate win_for_x in
          print_s [%sexp (evaluation : Game.Evaluation.t)];
-         let evaluation = evaluate win_for_x in
+         let evaluation = evaluate non_win in
          print_s [%sexp (evaluation : Game.Evaluation.t)];
          return ())
   ;;
