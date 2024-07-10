@@ -202,13 +202,13 @@ module Exercises = struct
   ;;
 
   (* Exercise 3 *)
-  let winning_moves ~(me : Game.Piece.t) (game : Game.t) : Game.Position.t list =
+  let winning_moves ~(me : Game.Piece.t) (game : Game.t) : Game.Position.t list = 
     let moves = available_moves game in
     List.map moves ~f:(fun i -> 
       let tmp_game = {Game.game_kind = game.game_kind; 
         board = Map.add_exn game.board ~key:i ~data:me} in
       match evaluate tmp_game with 
-      | Game.Evaluation.Game_over _ 
+      | Game.Evaluation.Game_over {winner = Some player} when Game.Piece.equal player me 
           -> Some i
       | _ -> None
     ) |> List.filter_opt
@@ -275,6 +275,91 @@ module Exercises = struct
     print_s [%sexp (moves : Game.Position.t list)];
     [%expect
       {|(((row 1) (column 1)))|}];
+    return ()
+  ;;
+
+  let score ~(me : Game.Piece.t) (game : Game.t) = 
+    match evaluate game with
+    | Game_over {winner = Some player} 
+        when Game.Piece.equal player me -> Int.max_value
+    | Game_over {winner = Some player} 
+        when Game.Piece.equal player (Game.Piece.flip me) -> Int.min_value
+    | Game_over {winner = None} -> 0
+    | _ -> 0
+  ;;
+
+  let%expect_test "score_win_for_x" =
+    let sc = score ~me:Game.Piece.X win_for_x in
+    print_s [%sexp (sc : int)];
+    [%expect
+      {|4611686018427387903|}];
+    return ()
+  ;;
+
+  let%expect_test "score_win_for_x" =
+    let sc = score ~me:Game.Piece.O win_for_x in
+    print_s [%sexp (sc : int)];
+    [%expect
+      {|-4611686018427387904|}];
+    return ()
+  ;;
+
+  let get_tmp_game ~game ~tmp_pos ~curr_player =
+    let open Game in 
+    {Game.game_kind = game.game_kind; 
+    board = Map.add_exn game.board ~key:tmp_pos ~data:curr_player}
+  ;;
+
+  let rec minimax ~(game : Game.t) ~(curr_player : Game.Piece.t) ~(me : Game.Piece.t) ~(max_depth) =
+    match evaluate game with
+    | Game.Evaluation.Game_over _ -> None, score game ~me
+    | _ ->
+      match max_depth with
+      | 0 -> None, score game ~me 
+      | _ -> 
+          match Game.Piece.equal curr_player me with 
+          | true -> 
+            let res = available_moves_that_do_not_immediately_lose game ~me:curr_player 
+            |> List.fold 
+            ~init:(None, Int.min_value) 
+            ~f:(fun (best_pos, best_sc) tmp_pos -> 
+              let _, value = minimax ~game:(get_tmp_game ~game ~curr_player ~tmp_pos) 
+                ~max_depth:(max_depth - 1)
+                ~curr_player:(Game.Piece.flip curr_player)
+                ~me in
+                (match value >= best_sc with
+                | true -> Some tmp_pos, value
+                | false -> best_pos, best_sc)
+              ) in
+              res
+          | false -> 
+            let res = available_moves_that_do_not_immediately_lose game ~me:curr_player 
+            |> List.fold 
+            ~init:(None, Int.max_value) 
+            ~f:(fun (best_pos, best_sc) tmp_pos -> 
+              let _, value = minimax ~game:(get_tmp_game ~game ~curr_player ~tmp_pos) 
+                ~max_depth:(max_depth - 1)
+                ~curr_player:(Game.Piece.flip curr_player)
+                ~me in
+                (match value <= best_sc with
+                | true -> Some tmp_pos, value
+                | false -> best_pos, best_sc)
+              ) in
+              (* match res with
+              | Some p, _ -> print_game (get_tmp_game ~game ~curr_player ~tmp_pos:p);minimax ~game:(get_tmp_game ~game ~curr_player ~tmp_pos:p)
+              ~max_depth:(max_depth - 1)
+              ~curr_player:(Game.Piece.flip curr_player)
+              ~me
+              | _ -> res *)
+              res
+  ;;
+
+  let%expect_test "minimax_win_for_x" =
+    let game = get_tmp_game ~game:non_win ~curr_player:Game.Piece.O ~tmp_pos:{Game.Position.row = 1; column = 1} in
+    let sc = minimax ~me:Game.Piece.O ~game ~curr_player:Game.Piece.O ~max_depth:3 in
+    print_s [%sexp (sc : Game.Position.t option * int)];
+    [%expect
+      {|-4611686018427387904|}];
     return ()
   ;;
 
