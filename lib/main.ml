@@ -251,8 +251,19 @@ module Exercises = struct
     return ()
   ;;
 
-  let available_moves_that_do_not_immediately_lose ~(me : Game.Piece.t) (game : Game.t) : Game.Position.t list =
-    let moves = available_moves game in
+  let get_neighbors pos = 
+    List.map Game.Position.all_offsets ~f:(fun f -> f pos)
+  ;;
+
+  let available_moves_that_do_not_immediately_lose ~(me : Game.Piece.t) (game : Game.t) : Game.Position.t list = 
+    let _available_moves = available_moves game in
+    let taken_spots = Map.key_set game.board |> Set.to_list in
+    let moves = List.map taken_spots ~f:(fun pos ->  get_neighbors pos) |> List.concat 
+                |> List.filter ~f:(fun pos -> 
+                  Game.Position.in_bounds ~game_kind:game.game_kind pos 
+                  && (Map.mem game.board pos |> not))
+                |> Game.Position.Set.of_list
+                |> Set.to_list in
     List.map moves ~f:(fun i -> 
       let tmp_game = {Game.game_kind = game.game_kind; 
         board = Map.add_exn game.board ~key:i ~data:me} in
@@ -334,10 +345,6 @@ module Exercises = struct
   ;;
 
   let rec minimax ~(game : Game.t) ~(curr_player : Game.Piece.t) ~(me : Game.Piece.t) ~(max_depth) =
-    (* print_s [%message (max_depth:int)]; *)
-    (* print_game game;
-    print_s [%message (curr_player:Game.Piece.t)];
-    print_endline ""; *)
     match evaluate game with
     | Game.Evaluation.Game_over _ -> score game ~me
     | _ ->
@@ -379,7 +386,7 @@ module Exercises = struct
     List.fold ~init:({Game.Position.row = 0; column = 0}, Int.min_value) ~f:(
       fun (best_pos, best_sc) tmp_pos -> 
         let tmp_game = get_tmp_game ~game ~curr_player ~tmp_pos in
-        let sc = minimax ~game:tmp_game ~curr_player:(Game.Piece.flip curr_player) ~me ~max_depth:4 in
+        let sc = minimax ~game:tmp_game ~curr_player:(Game.Piece.flip curr_player) ~me ~max_depth:1 in
         match sc >= best_sc with 
         | true -> tmp_pos, sc
         | false -> best_pos, best_sc
@@ -556,6 +563,7 @@ let handle (_client : unit) query =
             ~curr_player:query.you_play 
             ~me:query.you_play in
   return {Rpcs.Take_turn.Response.position = response; piece = query.you_play}
+  (* return {Rpcs.Take_turn.Response.position = {Game.Position.column = 0; row = 0}; piece = query.you_play} *)
 ;;
 
 let implementations =
