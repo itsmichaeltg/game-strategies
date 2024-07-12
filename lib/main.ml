@@ -333,7 +333,7 @@ module Exercises = struct
     board = Map.add_exn game.board ~key:tmp_pos ~data:curr_player}
   ;;
 
-  let rec minimax ~(game : Game.t) ~(curr_player : Game.Piece.t) ~(me : Game.Piece.t) ~(max_depth) ~_acc =
+  let rec minimax ~(game : Game.t) ~(curr_player : Game.Piece.t) ~(me : Game.Piece.t) ~(max_depth) =
     (* print_s [%message (max_depth:int)]; *)
     (* print_game game;
     print_s [%message (curr_player:Game.Piece.t)];
@@ -353,8 +353,7 @@ module Exercises = struct
               let value = minimax ~game:(get_tmp_game ~game ~curr_player ~tmp_pos) 
                 ~max_depth:(max_depth - 1)
                 ~curr_player:(Game.Piece.flip curr_player)
-                ~me
-                ~_acc:best_sc in
+                ~me in
                 (match value >= best_sc with
                 | true -> value
                 | false -> best_sc)
@@ -367,8 +366,7 @@ module Exercises = struct
               let value = minimax ~game:(get_tmp_game ~game ~curr_player ~tmp_pos) 
                 ~max_depth:(max_depth - 1)
                 ~curr_player:(Game.Piece.flip curr_player)
-                ~me
-                ~_acc:best_sc in
+                ~me in
                 (match value <= best_sc with
                 | true -> value
                 | false -> best_sc)
@@ -381,7 +379,7 @@ module Exercises = struct
     List.fold ~init:({Game.Position.row = 0; column = 0}, Int.min_value) ~f:(
       fun (best_pos, best_sc) tmp_pos -> 
         let tmp_game = get_tmp_game ~game ~curr_player ~tmp_pos in
-        let sc = minimax ~game:tmp_game ~curr_player:(Game.Piece.flip curr_player) ~me ~max_depth:10 ~_acc:0 in
+        let sc = minimax ~game:tmp_game ~curr_player:(Game.Piece.flip curr_player) ~me ~max_depth:4 in
         match sc >= best_sc with 
         | true -> tmp_pos, sc
         | false -> best_pos, best_sc
@@ -456,7 +454,7 @@ module Exercises = struct
     List.fold ~init:({Game.Position.row = 0; column = 0}, Int.min_value) ~f:(
       fun (best_pos, best_sc) tmp_pos -> 
         let tmp_game = get_tmp_game ~game ~curr_player ~tmp_pos in
-        let sc = alphabeta ~game:tmp_game ~curr_player:(Game.Piece.flip curr_player) ~me ~max_depth:10 ~alpha:Int.min_value ~beta:Int.max_value in
+        let sc = alphabeta ~game:tmp_game ~curr_player:(Game.Piece.flip curr_player) ~me ~max_depth:0 ~alpha:Int.min_value ~beta:Int.max_value in
         match sc >= best_sc with 
         | true -> tmp_pos, sc
         | false -> best_pos, best_sc
