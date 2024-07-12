@@ -278,6 +278,21 @@ module Exercises = struct
     return ()
   ;;
 
+  let%expect_test "available_moves_that_do_not_immediately_lose_non_win" =
+    let current_game =
+      let open Game in
+      empty_game
+      |> place_piece ~piece:Piece.X ~position:{ Position.row = 1; column = 1 }
+      |> place_piece ~piece:Piece.X ~position:{ Position.row = 2; column = 2 }
+      |> place_piece ~piece:Piece.O ~position:{ Position.row = 2; column = 0 }
+    in
+    let moves = available_moves_that_do_not_immediately_lose ~me:Game.Piece.O current_game in
+    print_s [%sexp (moves:Game.Position.t list)];
+    [%expect
+      {|(((row 0) (column 0)))|}];
+      return ()
+  ;;
+
   let score ~(me : Game.Piece.t) (game : Game.t) = 
     match evaluate game with
     | Game_over {winner = Some player} 
@@ -318,12 +333,16 @@ module Exercises = struct
     board = Map.add_exn game.board ~key:tmp_pos ~data:curr_player}
   ;;
 
-  let rec minimax ~(game : Game.t) ~(curr_player : Game.Piece.t) ~(me : Game.Piece.t) ~(max_depth) ~acc=
+  let rec minimax ~(game : Game.t) ~(curr_player : Game.Piece.t) ~(me : Game.Piece.t) ~(max_depth) ~_acc =
+    (* print_s [%message (max_depth:int)]; *)
+    (* print_game game;
+    print_s [%message (curr_player:Game.Piece.t)];
+    print_endline ""; *)
     match evaluate game with
-    | Game.Evaluation.Game_over _ -> acc + score game ~me
+    | Game.Evaluation.Game_over _ -> score game ~me
     | _ ->
       match max_depth with
-      | 0 -> acc + score game ~me 
+      | 0 -> score game ~me 
       | _ -> 
           match Game.Piece.equal curr_player me with 
           | true -> 
@@ -335,12 +354,12 @@ module Exercises = struct
                 ~max_depth:(max_depth - 1)
                 ~curr_player:(Game.Piece.flip curr_player)
                 ~me
-                ~acc:best_sc in
-                (match acc + value >= best_sc with
-                | true -> acc + value
+                ~_acc:best_sc in
+                (match value >= best_sc with
+                | true -> value
                 | false -> best_sc)
               )
-          | false -> 
+          | false ->  
             available_moves_that_do_not_immediately_lose game ~me:curr_player 
             |> List.fold 
             ~init:Int.max_value 
@@ -349,41 +368,98 @@ module Exercises = struct
                 ~max_depth:(max_depth - 1)
                 ~curr_player:(Game.Piece.flip curr_player)
                 ~me
-                ~acc:best_sc in
-                (match value + acc <= best_sc with
-                | true -> value + acc
+                ~_acc:best_sc in
+                (match value <= best_sc with
+                | true -> value
                 | false -> best_sc)
               )
   ;;
 
+  (* let rec _alphabeta ~game ~max_depth ~alpha ~beta ~curr_player ~me ~acc =
+    match evaluate game with
+    | Game.Evaluation.Game_over _ -> acc + score game ~me
+    | _ ->
+      match max_depth with
+      | 0 -> acc + score game ~me 
+      | _ -> 
+        match Game.Piece.equal curr_player me with 
+          | true -> available_moves_that_do_not_immediately_lose game ~me:curr_player 
+          |> List.fold_until 
+          ~init:Int.min_value
+          ~f:(fun best_sc tmp_pos -> 
+            let value = _alphabeta ~game:(get_tmp_game ~game ~curr_player ~tmp_pos) ~beta ~alpha
+              ~max_depth:(max_depth - 1)
+              ~curr_player:(Game.Piece.flip curr_player)
+              ~me
+              ~acc:best_sc in
+              if value >= beta
+                then Stop 0
+              else
+              (match acc + value >= best_sc with
+              | true -> Continue (acc + value)
+              | false -> Continue (best_sc))
+            )
+            ~finish:(fun best_sc -> best_sc)
+          | false -> 
+            available_moves_that_do_not_immediately_lose game ~me:curr_player 
+            |> List.fold_until 
+            ~init:Int.max_value
+            ~f:(fun best_sc tmp_pos -> 
+              let value = _alphabeta ~game:(get_tmp_game ~game ~curr_player ~tmp_pos) ~alpha ~beta
+                ~max_depth:(max_depth - 1)
+                ~curr_player:(Game.Piece.flip curr_player)
+                ~me
+                ~acc:best_sc in
+                if value <= alpha
+                  then Stop 0
+                else
+                (match acc + value <= best_sc with
+                | true -> Continue (acc + value)
+                | false -> Continue (best_sc))
+              )
+              ~finish:(fun best_sc -> best_sc)
+  ;; *)
+
   let best_move ~game ~curr_player ~me =
-    let pos, _ = available_moves_that_do_not_immediately_lose game ~me |> 
+    let moves = available_moves_that_do_not_immediately_lose game ~me in
+    let pos, _ =  moves |> 
     List.fold ~init:({Game.Position.row = 0; column = 0}, Int.min_value) ~f:(
       fun (best_pos, best_sc) tmp_pos -> 
         let tmp_game = get_tmp_game ~game ~curr_player ~tmp_pos in
-        let sc = minimax ~game:tmp_game ~curr_player ~me ~max_depth:3 ~acc:0 in
+        let sc = minimax ~game:tmp_game ~curr_player:(Game.Piece.flip curr_player) ~me ~max_depth:10 ~_acc:0 in
         match sc >= best_sc with 
-        | true -> print_s[%message ((tmp_pos, sc):Game.Position.t * int)];print_game tmp_game;tmp_pos, sc
+        | true -> tmp_pos, sc
         | false -> best_pos, best_sc
       ) in
     pos
   ;;
 
   let%expect_test "minimax_win_for_x" =
-    (* let game = get_tmp_game ~game:non_win ~curr_player:Game.Piece.O ~tmp_pos:{Game.Position.row = 1; column = 1} in *)
-    let sc = best_move ~me:Game.Piece.O ~game:non_win ~curr_player:Game.Piece.O in
+    let current_game =
+		let open Game in
+		empty_game
+		|> place_piece ~piece:Piece.X ~position:{ Position.row = 1; column = 0 }
+		|> place_piece ~piece:Piece.X ~position:{ Position.row = 2; column = 0 }
+		|> place_piece ~piece:Piece.X ~position:{ Position.row = 1; column = 1 }
+		|> place_piece ~piece:Piece.O ~position:{ Position.row = 0; column = 0 }
+		|> place_piece ~piece:Piece.O ~position:{ Position.row = 2; column = 1 }
+		|> place_piece ~piece:Piece.O ~position:{ Position.row = 2; column = 2 }
+	in
+    let sc = best_move ~me:Game.Piece.X ~game:current_game ~curr_player:Game.Piece.X in
     print_s [%sexp (sc : Game.Position.t)];
     [%expect
-      {|
-        ("(tmp_pos, sc)" (((row 1) (column 1)) 4611686018427387903))
-        X |   |
-        ---------
-        O | O |
-        ---------
-        O |   | X
-        ((row 1) (column 1))|}];
+      {|((row 1) (column 2))|}];
     return ()
   ;;
+
+  (* let%expect_test "minimax_win_for_x" =
+    let game = get_tmp_game ~game:non_win ~curr_player:Game.Piece.X ~tmp_pos:{Game.Position.row = 1; column = 1} in
+    let sc = best_move ~me:Game.Piece.O ~game ~curr_player:Game.Piece.O in
+    print_s [%sexp (sc : Game.Position.t)];
+    [%expect
+      {|-4611686018427387904|}];
+    return ()
+  ;; *)
 
   let exercise_one =
     Command.async
@@ -455,16 +531,12 @@ end
 
 let handle (_client : unit) query = 
   print_s [%message "Received query" (query : Rpcs.Take_turn.Query.t)];
-  let response = {Rpcs.Take_turn.Response.position = {Game.Position.row = 3; column = 3}; piece = Game.Piece.O} in
-  return response
-  (* Exercises.minimax 
+  let response = 
+  Exercises.best_move 
             ~game:query.game 
             ~curr_player:query.you_play 
-            ~me:Game.Piece.O 
-            ~max_depth:3 in
-  match response with
-  | Some pos -> return {Rpcs.Take_turn.Response.position = pos; piece = Game.Piece.O}
-  | None -> return {Rpcs.Take_turn.Response.position = {Game.Position.row = 3; column = 3}; piece = Game.Piece.O} *)
+            ~me:query.you_play in
+  return {Rpcs.Take_turn.Response.position = response; piece = query.you_play}
 ;;
 
 let implementations =

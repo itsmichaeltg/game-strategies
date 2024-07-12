@@ -1,0 +1,59 @@
+[H[2J[3J
+-------------------------------------
+
+Requesting move
+Received move for X at 2 x 0
+  |   |  
+---------
+  |   |  
+---------
+X |   |  
+
+Game continues
+
+-------------------------------------
+
+I play move for O at 1 x 0
+  |   |  
+---------
+O |   |  
+---------
+X |   |  
+
+Game continues
+[H[2J[3J
+-------------------------------------
+
+Requesting move
+Received move for X at 2 x 1
+  |   |  
+---------
+O |   |  
+---------
+X | X |  
+
+Game continues
+
+-------------------------------------
+
+I play move for O at 0 x 0
+O |   |  
+---------
+O |   |  
+---------
+X | X |  
+
+Game continues
+[H[2J[3J
+-------------------------------------
+
+Requesting move
+Received move for X at 2 x 2
+O |   |  
+---------
+O |   |  
+---------
+X | X | X
+
+Game over: X WINS!
+Game over - VICTORY! (playing X)
